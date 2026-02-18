@@ -1,4 +1,4 @@
-const BASE_URL = "https://your-openspecimen-url.com/openspecimen/rest/ng";
+const BASE_URL = "https://your-openspecimen-url.com/rest/ng";
 const USERNAME = "";
 const PASSWORD = "";
 const DOMAIN   = "";
