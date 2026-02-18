@@ -1,50 +1,49 @@
-const axios = require('axios');
+const BASE_URL = "https://your-openspecimen-url.com/openspecimen/rest/ng";
+const USERNAME = "";
+const PASSWORD = "";
+const DOMAIN   = "";
 
-// --- Configuration ---
-const CONFIG = {
-    baseUrl: '',
-    username: '',
-    password: '',
-    domain: 'openspecimen'
-};
-
-async function runOpenSpecimenTasks() {
+async function openspecimenDemo() {
     try {
         // 1. LOGIN
-        console.log('Logging in...');
-        const loginResponse = await axios.post(`${CONFIG.baseUrl}/sessions`, {
-            loginName: CONFIG.username,
-            password: CONFIG.password,
-            domainName: CONFIG.domain
+        const loginResponse = await fetch(`${BASE_URL}/sessions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                loginName: USERNAME,
+                password: PASSWORD,
+                domainName: DOMAIN
+            })
         });
 
-        const { token, firstName, lastName, loginName, id } = loginResponse.data;
+        if (!loginResponse.ok) {
+            const errorText = await loginResponse.text();
+            throw new Error(`Login failed: ${errorText}`);
+        }
 
-        // Create an Axios instance with the token pre-configured in headers
-        const osClient = axios.create({
-            baseURL: CONFIG.baseUrl,
-            headers: { 'X-OS-API-TOKEN': token }
-        });
+        const authData = await loginResponse.json();
+        const token = authData.token;
 
-        console.log('--- User Details ---');
-        console.log(`Full Name:  ${firstName} ${lastName}`);
-        console.log(`Login Name: ${loginName}`);
-        console.log(`User ID:    ${id}`);
-        console.log('--------------------\n');
+        console.log("--- Login Successful ---");
+        console.log(`User Name:  ${authData.firstName} ${authData.lastName}`);
+        console.log(`Login Name: ${authData.loginName}`);
+        console.log(`Token:      ${token.substring(0, 8)}...`);
 
         // 2. LOGOUT
-        // In OpenSpecimen, deleting the session resource logs you out
-        console.log('Logging out...');
-        await osClient.delete('/sessions');
-        console.log('Logout successful. Token invalidated.');
+        const logoutResponse = await fetch(`${BASE_URL}/sessions`, {
+            method: 'DELETE',
+            headers: {
+                'X-OS-API-TOKEN': token,
+                'Content-Type': 'application/json'
+            }
+        });
 
-    } catch (error) {
-        if (error.response) {
-            console.error(`API Error (${error.response.status}):`, error.response.data);
-        } else {
-            console.error('Connection Error:', error.message);
+        if (logoutResponse.ok) {
+            console.log("\n--- Logout Successful ---");
         }
+    } catch (err) {
+        console.error(err.message);
     }
 }
 
-runOpenSpecimenTasks();
+openspecimenDemo();
