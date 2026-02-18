@@ -47,3 +47,16 @@ async function openspecimenDemo() {
 }
 
 openspecimenDemo();
+
+
+
+// OUTPUT 
+
+--- Login Successful ---
+User Name:  Rohit Chaudhari
+Login Name: *******@gmail.com
+Token:      MGNlZjZl...****
+
+--- Logout Successful ---
+
+
