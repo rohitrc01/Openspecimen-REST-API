@@ -4,7 +4,7 @@ const fs = require('fs');
 const BASE_URL = "https://test.openspecimen.org/rest/ng";
 const USERNAME = "";
 const PASSWORD = "";
-const DOMAIN = "";
+const DOMAIN = "openspecimen";
 const CP_ID = 2;
 // ==========================================
 
@@ -12,12 +12,9 @@ async function listParticipantsInCP() {
     try {
         // 1️⃣ LOGIN
         console.log("Logging in...");
-
         const loginResponse = await fetch(`${BASE_URL}/sessions`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 loginName: USERNAME,
                 password: PASSWORD,
@@ -25,23 +22,25 @@ async function listParticipantsInCP() {
             })
         });
 
-
         if (!loginResponse.ok) {
             const errorBody = await loginResponse.text();
             throw new Error(`Login failed: ${loginResponse.status} - ${errorBody}`);
         }
-
         const { token } = await loginResponse.json();
         console.log("Login Successful ✅");
 
-        // 2️⃣ FETCH ALL PARTICIPANTS WITH PAGINATION
-        console.log(`\nFetching participants for CP ID: ${CP_ID}...\n`);
+        // 2️⃣ FETCH PARTICIPANTS
+        console.log(`\nFetching participants for CP ID: ${CP_ID}...`);
 
         let startAt = 0;
-        const maxResults = 100; // Set to null to fetch all records without pagination
+        const maxResults = null; // Can be 100 or null
         let allRegistrations = [];
+        let pageCount = 0;
 
-        while (true) { // breaks when no more records are returned 
+        while (true) {
+            pageCount++;
+            console.log(`Request ${pageCount}: Fetching from index ${startAt}...`);
+
             const response = await fetch(
                 `${BASE_URL}/collection-protocol-registrations/list`,
                 {
@@ -52,8 +51,8 @@ async function listParticipantsInCP() {
                     },
                     body: JSON.stringify({
                         cpId: CP_ID,
-                        startAt,
-                        maxResults 
+                        startAt: startAt,
+                        maxResults: maxResults 
                     })
                 }
             );
@@ -62,37 +61,38 @@ async function listParticipantsInCP() {
                 const errorBody = await response.text();
                 throw new Error(`Fetch failed: ${response.status} - ${errorBody}`);
             }
+            
 
             const registrations = await response.json();
 
-            if (!registrations || registrations.length === 0) {
+            // Break if no data is returned
+            if (!registrations || registrations.length === 0) break;
+            console.log(registrations)
+            allRegistrations = allRegistrations.concat(registrations);
+            console.log(`Received ${registrations.length} records.`);
+
+            // --- OPTIMIZED EXIT CONDITIONS ---
+            
+            // 1. If maxResults is null, the server gave us everything. Stop.
+            if (maxResults === null) {
                 break;
             }
 
-            allRegistrations = allRegistrations.concat(registrations);
+            // 2. If we received fewer records than we asked for, we've reached the end.
+            if (registrations.length < maxResults) {
+                break;
+            }
+
+            // 3. Increment startAt only if maxResults is a valid number
             startAt += maxResults;
         }
 
-        if (allRegistrations.length === 0) {
-            console.log("No participants found in this CP.");
-            return;
-        }
-
-        console.log(`Total Participants Found: ${allRegistrations.length}\n`);
+        console.log(`\nTotal Participants Collected: ${allRegistrations.length}`);
 
         // 3️⃣ PREPARE CSV
-        const header = [
-            "Participant ID",
-            "PPID",
-            "First Name",
-            "Last Name",
-            "Gender",
-            "Birth Date",
-            "Registration Date"
-        ];
-
+        const header = ["Participant ID", "PPID", "First Name", "Last Name", "Gender", "Birth Date", "Registration Date"];
         const rows = allRegistrations.map(reg => {
-            const p = reg.participant;
+            const p = reg.participant || {};
             return [
                 p.id || "",
                 reg.ppid || "",
@@ -105,11 +105,9 @@ async function listParticipantsInCP() {
         });
 
         const csvContent = [header.join(","), ...rows].join("\n");
-
         fs.writeFileSync("participants.csv", csvContent);
 
-        console.log("CSV Export Successful ✅");
-        console.log("File created: participants.csv\n");
+        console.log("CSV Export Successful ✅\nFile created: participants.csv\n");
 
     } catch (err) {
         console.error("❌ Error:", err.message);
@@ -117,7 +115,6 @@ async function listParticipantsInCP() {
 }
 
 listParticipantsInCP();
-
 
 
 
