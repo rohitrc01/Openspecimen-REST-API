@@ -2,9 +2,9 @@ const fs = require('fs');
 
 // ================= CONFIG =================
 const BASE_URL = "https://test.openspecimen.org/rest/ng";
-const USERNAME = "daren";
-const PASSWORD = "Admin@1234";
-const DOMAIN = "openspecimen";
+const USERNAME = "";
+const PASSWORD = "";
+const DOMAIN = "";
 const CP_ID = 2;
 // ==========================================
 
@@ -117,3 +117,17 @@ async function listParticipantsInCP() {
 }
 
 listParticipantsInCP();
+
+
+
+
+// OUTPUT 
+Logging in...
+Login Successful ✅
+
+Fetching participants for CP ID: 2...
+
+Total Participants Found: 68
+
+CSV Export Successful ✅
+File created: participants.csv
