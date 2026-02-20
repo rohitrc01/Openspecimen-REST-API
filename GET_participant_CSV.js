@@ -90,7 +90,7 @@ async function listParticipantsInCP() {
         console.log(`\nTotal Participants Collected: ${allRegistrations.length}`);
 
         // 3️⃣ PREPARE CSV
-        const header = ["Participant ID", "PPID", "First Name", "Last Name", "Gender", "Birth Date", "Registration Date"];
+        const header = ["Participant ID", "PPID", "First Name", "Last Name", "Gender", "Birth Date", "Registration Date", "pmis"];
         const rows = allRegistrations.map(reg => {
             const p = reg.participant || {};
             return [
@@ -101,6 +101,7 @@ async function listParticipantsInCP() {
                 p.gender || "",
                 p.birthDate || "",
                 reg.registrationDate || ""
+                p.pmis || ""
             ].join(",");
         });
 
