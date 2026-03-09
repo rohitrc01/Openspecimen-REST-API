@@ -6,126 +6,163 @@ const USERNAME = "";
 const PASSWORD = "";
 const DOMAIN = "openspecimen";
 const CP_ID = 2;
+const PAGE_SIZE = 100; // Keep 100 for performance
 // ==========================================
 
-async function listParticipantsInCP() {
+
+// 🔹 Helper: Flatten nested objects
+function flattenObject(obj, parent = '', res = {}) {
+    for (let key in obj) {
+        const propName = parent ? `${parent}.${key}` : key;
+
+        if (Array.isArray(obj[key])) {
+            res[propName] = JSON.stringify(obj[key]);
+        } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+            flattenObject(obj[key], propName, res);
+        } else {
+            res[propName] = obj[key];
+        }
+    }
+    return res;
+}
+
+
+// 🔹 Login function
+async function login() {
+    const response = await fetch(`${BASE_URL}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            loginName: USERNAME,
+            password: PASSWORD,
+            domainName: DOMAIN
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Login failed: ${error}`);
+    }
+
+    const { token } = await response.json();
+    return token;
+}
+
+
+// 🔹 Get all registration IDs (Paged)
+async function getAllRegistrations(token) {
+    let startAt = 0;
+    let allRegs = [];
+
+    while (true) {
+        const response = await fetch(
+            `${BASE_URL}/collection-protocol-registrations/list`,
+            {
+                method: 'POST',
+                headers: {
+                    'X-OS-API-TOKEN': token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    cpId: CP_ID,
+                    startAt: startAt,
+                    maxResults: PAGE_SIZE
+                })
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Fetch list failed: ${error}`);
+        }
+
+        const regs = await response.json();
+        if (!regs || regs.length === 0) break;
+
+        allRegs = allRegs.concat(regs);
+
+        if (regs.length < PAGE_SIZE) break;
+        startAt += PAGE_SIZE;
+    }
+
+    return allRegs;
+}
+
+
+// 🔹 Get full registration detail
+async function getRegistrationDetail(token, regId) {
+    const response = await fetch(
+        `${BASE_URL}/collection-protocol-registrations/${regId}`,
+        {
+            headers: {
+                'X-OS-API-TOKEN': token
+            }
+        }
+    );
+
+    if (!response.ok) {
+        const error = await response.text();
+        console.error(`Failed to fetch detail for ID ${regId}: ${error}`);
+        return null;
+    }
+
+    return await response.json();
+}
+
+
+// 🔹 Main Function
+async function exportParticipants() {
     try {
-        // 1️⃣ LOGIN
-        console.log("Logging in...");
-        const loginResponse = await fetch(`${BASE_URL}/sessions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                loginName: USERNAME,
-                password: PASSWORD,
-                domainName: DOMAIN
-            })
-        });
+        console.log("🔐 Logging in...");
+        const token = await login();
+        console.log("✅ Login successful");
 
-        if (!loginResponse.ok) {
-            const errorBody = await loginResponse.text();
-            throw new Error(`Login failed: ${loginResponse.status} - ${errorBody}`);
-        }
-        const { token } = await loginResponse.json();
-        console.log("Login Successful ✅");
+        console.log("\n📥 Fetching registration list...");
+        const registrations = await getAllRegistrations(token);
+        console.log(`Total registrations found: ${registrations.length}`);
 
-        // 2️⃣ FETCH PARTICIPANTS
-        console.log(`\nFetching participants for CP ID: ${CP_ID}...`);
+        let detailedData = [];
 
-        let startAt = 0;
-        const maxResults = null; // Can be 100 or null
-        let allRegistrations = [];
-        let pageCount = 0;
+        for (let i = 0; i < registrations.length; i++) {
+            const reg = registrations[i];
+            console.log(`Fetching detail ${i + 1}/${registrations.length} (ID: ${reg.id})`);
 
-        while (true) {
-            pageCount++;
-            console.log(`Request ${pageCount}: Fetching from index ${startAt}...`);
-
-            const response = await fetch(
-                `${BASE_URL}/collection-protocol-registrations/list`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'X-OS-API-TOKEN': token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        cpId: CP_ID,
-                        startAt: startAt,
-                        maxResults: maxResults 
-                    })
-                }
-            );
-
-            if (!response.ok) {
-                const errorBody = await response.text();
-                throw new Error(`Fetch failed: ${response.status} - ${errorBody}`);
+            const detail = await getRegistrationDetail(token, reg.id);
+            if (detail) {
+                detailedData.push(flattenObject(detail));
             }
-            
-
-            const registrations = await response.json();
-
-            // Break if no data is returned
-            if (!registrations || registrations.length === 0) break;
-            console.log(registrations)
-            allRegistrations = allRegistrations.concat(registrations);
-            console.log(`Received ${registrations.length} records.`);
-
-            // --- OPTIMIZED EXIT CONDITIONS ---
-            
-            // 1. If maxResults is null, the server gave us everything. Stop.
-            if (maxResults === null) {
-                break;
-            }
-
-            // 2. If we received fewer records than we asked for, we've reached the end.
-            if (registrations.length < maxResults) {
-                break;
-            }
-
-            // 3. Increment startAt only if maxResults is a valid number
-            startAt += maxResults;
         }
 
-        console.log(`\nTotal Participants Collected: ${allRegistrations.length}`);
+        if (detailedData.length === 0) {
+            console.log("No data found.");
+            return;
+        }
 
-        // 3️⃣ PREPARE CSV
-        const header = ["Participant ID", "PPID", "First Name", "Last Name", "Gender", "Birth Date", "Registration Date", "pmis"];
-        const rows = allRegistrations.map(reg => {
-            const p = reg.participant || {};
-            return [
-                p.id || "",
-                reg.ppid || "",
-                p.firstName || "",
-                p.lastName || "",
-                p.gender || "",
-                p.birthDate || "",
-                reg.registrationDate || ""
-                p.pmis || ""
-            ].join(",");
+        // Collect all unique headers dynamically
+        let headers = new Set();
+        detailedData.forEach(row => {
+            Object.keys(row).forEach(key => headers.add(key));
         });
 
-        const csvContent = [header.join(","), ...rows].join("\n");
-        fs.writeFileSync("participants.csv", csvContent);
+        headers = Array.from(headers);
 
-        console.log("CSV Export Successful ✅\nFile created: participants.csv\n");
+        // Create CSV rows
+        const rows = detailedData.map(row => {
+            return headers.map(h => {
+                let value = row[h] ?? "";
+                return `"${String(value).replace(/"/g, '""')}"`;
+            }).join(",");
+        });
+
+        const csvContent = [headers.join(","), ...rows].join("\n");
+        fs.writeFileSync("participants_full_export.csv", csvContent);
+
+        console.log("\n🎉 Export Successful!");
+        console.log("File created: participants_full_export.csv");
 
     } catch (err) {
         console.error("❌ Error:", err.message);
     }
 }
 
-listParticipantsInCP();
-
-
-
-// OUTPUT 
-Logging in...
-Login Successful ✅
-
-Fetching participants for CP ID: 2...
-
-Total Participants Found: 68
-
-CSV Export Successful ✅
-File created: participants.csv
+exportParticipants();
